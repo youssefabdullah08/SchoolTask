@@ -2,6 +2,8 @@
 using DAL.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Threading.Tasks;
 
 namespace School.web.Controllers
 {
@@ -11,48 +13,95 @@ namespace School.web.Controllers
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public SubjectController(IUnitOfWork unitOfWork )
+        public SubjectController(IUnitOfWork unitOfWork)
         {
-           _unitOfWork = unitOfWork;
+            _unitOfWork = unitOfWork;
         }
 
         [HttpGet]
-
         public async Task<IActionResult> Get()
         {
-            var subjects = await _unitOfWork.Repository<Subject>().GetAllEntities();
-            return Ok(subjects);
+            try
+            {
+                var subjects = await _unitOfWork.Repository<Subject>().GetAllEntities();
+                return Ok(subjects);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Error retrieving data: {ex.Message}");
+            }
         }
+
         [HttpPost]
-        public async Task<IActionResult> Post(Subject subject)
+        public async Task<IActionResult> Post([FromBody] Subject subject)
         {
-            await _unitOfWork.Repository<Subject>().CreateEntityAsync(subject);
-            await _unitOfWork.Complete();
-            return StatusCode(StatusCodes.Status201Created);
+            if (subject == null || string.IsNullOrWhiteSpace(subject.Name))
+            {
+                return BadRequest("Invalid subject data.");
+            }
+
+            try
+            {
+                await _unitOfWork.Repository<Subject>().CreateEntityAsync(subject);
+                await _unitOfWork.Complete();
+                return CreatedAtAction(nameof(Get), new { id = subject.Id }, subject);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Error saving data: {ex.Message}");
+            }
         }
 
         [HttpPut]
-
-        public async Task<IActionResult> Put(Subject subject)
+        public async Task<IActionResult> Put([FromBody] Subject subject)
         {
-            _unitOfWork.Repository<Subject>().UpdateEntityAsync(subject);
-            await _unitOfWork.Complete();
-            return Ok(subject);
+            if (subject == null || subject.Id <= 0 || string.IsNullOrWhiteSpace(subject.Name))
+            {
+                return BadRequest("Invalid subject data.");
+            }
+
+            try
+            {
+                var existingSubject = await _unitOfWork.Repository<Subject>().GetEntityById(subject.Id);
+                if (existingSubject == null)
+                {
+                    return NotFound($"Subject with ID {subject.Id} not found.");
+                }
+
+                _unitOfWork.Repository<Subject>().UpdateEntityAsync(subject);
+                await _unitOfWork.Complete();
+                return Ok(subject);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Error updating data: {ex.Message}");
+            }
         }
 
         [HttpDelete("{id}")]
-
         public async Task<IActionResult> Delete(int id)
         {
-          var sub=  await _unitOfWork.Repository<Subject>().GetEntityById(id);
-            _unitOfWork.Repository<Subject>().DeleteEntityAsync(sub);
-            await _unitOfWork.Complete();
-            return Ok(id);
+            if (id <= 0)
+            {
+                return BadRequest("Invalid subject ID.");
+            }
+
+            try
+            {
+                var subject = await _unitOfWork.Repository<Subject>().GetEntityById(id);
+                if (subject == null)
+                {
+                    return NotFound($"Subject with ID {id} not found.");
+                }
+
+                _unitOfWork.Repository<Subject>().DeleteEntityAsync(subject);
+                await _unitOfWork.Complete();
+                return NoContent(); // 204 No Content
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Error deleting data: {ex.Message}");
+            }
         }
-
-
-
-
-
     }
 }
